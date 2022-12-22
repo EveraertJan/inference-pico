@@ -2,9 +2,14 @@
 
 #include <stdio.h>
 
+#include "f_util.h"
+#include "ff.h"
+
 #include "pico/stdlib.h"
 #include "pico/analog_microphone.h"
 #include "tusb.h"
+
+#include "hw_config.h"
 
 // configuration
 const struct analog_microphone_config config = {
@@ -56,8 +61,7 @@ void on_analog_samples_ready()
 
 int main( void )
 {
-
-
+                  
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
@@ -79,7 +83,7 @@ int main( void )
     printf("hello analog microphone2\n");
 
 
-    // set callback that is called when all the samples in the library
+    // set callback that is called whanalogen all the samples in the library
     // internal sample buffer are ready for reading
     analog_microphone_set_samples_ready_handler(on_analog_samples_ready);
         printf("after sample\n");
@@ -89,6 +93,13 @@ int main( void )
         printf("PDM microphone start failed!\n");
         while (1) { tight_loop_contents();  }
     }
+
+
+
+    // sd_card_t *pSD = sd_get_by_num(0);
+    // FRESULT fr = f_mount(&pSD->fatfs, pSD->pcName, 1);
+    // if (FR_OK != fr) panic("f_mount error: %s (%d)\n", FRESULT_str(fr), fr);
+    // FIL fil;
 
     while (1) {
 
@@ -131,28 +142,49 @@ int main( void )
                     printf("error\n");
                 } else {
 
-                    ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
-                              result.timing.dsp, result.timing.classification, result.timing.anomaly);
+                  ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n", result.timing.dsp, result.timing.classification, result.timing.anomaly);
 
-                    // print the predictions
-                    ei_printf("[");
-                    for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++)
-                    {
-                        ei_printf("%.5f", result.classification[ix].value);
-                        if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
+                  // print the predictions
+                  ei_printf("[");
+                 
+                  // const char* const filename = "log.txt";
+                  // fr = f_open(&fil, filename, FA_OPEN_APPEND | FA_WRITE);
+                  
+                  // if (FR_OK != fr && FR_EXIST != fr) {
+                  //   panic("f_open(%s) error: %s (%d)\n", filename, FRESULT_str(fr), fr);
+                  // }
+                  
+                  for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++)
+                  {
+                      ei_printf("%.5f", result.classification[ix].value);
+
+                      // f_printf(&fil, "%f", result.classification[ix].value);
+
+                      if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
+                        ei_printf(", ");
+                        // f_printf(&fil, ",");
+                      } else {
+                        if (ix != EI_CLASSIFIER_LABEL_COUNT - 1)
+                        {
                           ei_printf(", ");
-                        } else {
-                          if (ix != EI_CLASSIFIER_LABEL_COUNT - 1)
-                          {
-                            ei_printf(", ");
-                          }
-                      }
+                          // f_printf(&fil, ",");
+                        }
+                    }
 
-                    }
-                    if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
-                        printf("%.3f", result.anomaly);
-                    }
+                  }
+                  if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
+                      printf("%.3f", result.anomaly);
+                      // f_printf(&fil, "%f", result.anomaly);
+                  }
+
+                  // // close file
+                  // fr = f_close(&fil);
+                  // if (FR_OK != fr) {
+                  //     printf("f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+                  // }
+                  // f_unmount(pSD->pcName);
                 }
+
                 printf("]\n");
             }   
 

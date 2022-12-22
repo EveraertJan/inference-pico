@@ -13,27 +13,32 @@ set(CMAKE_CXX_STANDARD 11)
 
 pico_sdk_init()
 
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/source/FatFs_SPI build)
+
+
 
 add_library(pico_analog_microphone INTERFACE)
-
 target_sources(pico_analog_microphone INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/source/mic/analog_microphone.cpp
 )
-
 target_include_directories(pico_analog_microphone INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/source/mic/include
 )
 target_link_libraries(pico_analog_microphone INTERFACE pico_stdlib hardware_adc hardware_dma)
 
 
+
+
 add_executable(app
   source/main.cpp 
+  source/hw_config.c
  )
 
 add_subdirectory(source)
 
 target_link_libraries(app PUBLIC pico_stdlib)
 target_link_libraries(app PUBLIC pico_analog_microphone)
+target_link_libraries(app PUBLIC FatFs_SPI)
 
 
 
