@@ -1,15 +1,96 @@
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
-
 #include <stdio.h>
-
 #include "f_util.h"
 #include "ff.h"
-
 #include "pico/stdlib.h"
 #include "pico/analog_microphone.h"
 #include "tusb.h"
+#include "rtc.h"
+#include "sd_card.h"
 
-#include "hw_config.h"
+#include <hardware/gpio.h>
+#include <hardware/uart.h>
+
+#include <pico/stdio_usb.h>
+
+extern "C" void writ();
+
+void writ() {
+
+    FRESULT fr;
+    FATFS fs;
+    FIL fil;
+    int ret;
+    char buf[100];
+    char filename[] = "test02.txt";
+
+
+    // Initialize SD card
+    if (!sd_init_driver()) {
+        printf("ERROR: Could not initialize SD card\r\n");
+        while (true);
+    }
+
+    // Mount drive
+    fr = f_mount(&fs, "0:", 1);
+    if (fr != FR_OK) {
+        printf("ERROR: Could not mount filesystem (%d)\r\n", fr);
+        while (true);
+    }
+
+    // Open file for writing ()
+    fr = f_open(&fil, filename, FA_WRITE | FA_CREATE_ALWAYS);
+    if (fr != FR_OK) {
+        printf("ERROR: Could not open file (%d)\r\n", fr);
+        while (true);
+    }
+
+    // Write something to file
+    ret = f_printf(&fil, "This is another test\r\n");
+    if (ret < 0) {
+        printf("ERROR: Could not write to file (%d)\r\n", ret);
+        f_close(&fil);
+        while (true);
+    }
+    ret = f_printf(&fil, "of writing to an SD card.\r\n");
+    if (ret < 0) {
+        printf("ERROR: Could not write to file (%d)\r\n", ret);
+        f_close(&fil);
+        while (true);
+    }
+
+    // Close file
+    fr = f_close(&fil);
+    if (fr != FR_OK) {
+        printf("ERROR: Could not close file (%d)\r\n", fr);
+        while (true);
+    }
+
+    // Open file for reading
+    fr = f_open(&fil, filename, FA_READ);
+    if (fr != FR_OK) {
+        printf("ERROR: Could not open file (%d)\r\n", fr);
+        while (true);
+    }
+
+    // Print every line in file over serial
+    printf("Reading from file '%s':\r\n", filename);
+    printf("---\r\n");
+    while (f_gets(buf, sizeof(buf), &fil)) {
+        printf(buf);
+    }
+    printf("\r\n---\r\n");
+
+    // Close file
+    fr = f_close(&fil);
+    if (fr != FR_OK) {
+        printf("ERROR: Could not close file (%d)\r\n", fr);
+        while (true);
+    }
+
+    // Unmount drive
+    f_unmount("0:");
+}
 
 // configuration
 const struct analog_microphone_config config = {
@@ -30,15 +111,10 @@ const struct analog_microphone_config config = {
 int16_t sample_buffer[256];
 volatile int samples_read = 0;
 
-#include <hardware/gpio.h>
-#include <hardware/uart.h>
-#include <pico/stdio_usb.h>
-#include <stdio.h>
-
 
 
 const uint MAX_FEATURE_LENGTH = 16000;
-const uint LED_PIN = 25;
+const uint LED = 25;
 
 bool inferencing = false;
 uint numSamples = 0;
@@ -58,50 +134,47 @@ void on_analog_samples_ready()
     // internal sample buffer are ready for reading 
     samples_read = analog_microphone_read(sample_buffer, 256);
 }
-
 int main( void )
 {
-                  
-  gpio_init(LED_PIN);
-  gpio_set_dir(LED_PIN, GPIO_OUT);
 
-
-  ei_impulse_result_t result = {nullptr};
+    ei_impulse_result_t result = {nullptr};
     // initialize stdio and wait for USB CDC connect
     stdio_init_all();
-    while (!tud_cdc_connected()) {
-        tight_loop_contents();
-    }
-
-    printf("hello analog microphone\n");
-
-    // initialize the analog microphone
-    if (analog_microphone_init(&config) < 0) {
-        printf("analog microphone initialization failed!\n");
-        while (1) { tight_loop_contents(); }
-    }
-    printf("hello analog microphone2\n");
 
 
-    // set callback that is called whanalogen all the samples in the library
-    // internal sample buffer are ready for reading
-    analog_microphone_set_samples_ready_handler(on_analog_samples_ready);
-        printf("after sample\n");
+
+    // while (!tud_cdc_connected()) {
+    //     tight_loop_contents();
+    // }
+
+    // printf("hello analog microphone\n");
+
+    // // // initialize the analog microphone
+    // if (analog_microphone_init(&config) < 0) {
+    //     printf("analog microphone initialization failed!\n");
+    //     while (1) { tight_loop_contents(); }
+    // }
+    // printf("after analog microphone\n");
+    // ei_sleep(1000);
+
+
+    // // set callback that is called whanalogen all the samples in the library
+    // // internal sample buffer are ready for reading
+    // analog_microphone_set_samples_ready_handler(on_analog_samples_ready);
+    // printf("after sample\n");
     
-    // start capturing data from the analog microphone
-    if (analog_microphone_start() < 0) {
-        printf("PDM microphone start failed!\n");
-        while (1) { tight_loop_contents();  }
-    }
+    // // start capturing data from the analog microphone
+    // if (analog_microphone_start() < 0) {
+    //     printf("PDM microphone start failed!\n");
+    //     while (1) { tight_loop_contents();  }
+    // }    
 
+    while (true) {
+      printf("going into writing \n");
 
-
-    // sd_card_t *pSD = sd_get_by_num(0);
-    // FRESULT fr = f_mount(&pSD->fatfs, pSD->pcName, 1);
-    // if (FR_OK != fr) panic("f_mount error: %s (%d)\n", FRESULT_str(fr), fr);
-    // FIL fil;
-
-    while (1) {
+      writ();
+      sleep_ms(1000);
+        
 
 
         if(inferencing) {
@@ -120,8 +193,6 @@ int main( void )
                 printf("after check\n");
         
 
-                // blink LED
-                gpio_put(LED_PIN, !gpio_get(LED_PIN));
 
                 // the features are stored into flash, and we don't want to load everything into RAM
                 signal_t features_signal;
@@ -135,21 +206,19 @@ int main( void )
 
                 printf("invoked\n");
         
-                ei_printf("run_classifier returned: %d\n", res);
+                printf("run_classifier returned: %d\n", res);
 
+                
 
                 if (res != 0) {
                     printf("error\n");
                 } else {
 
-                  ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n", result.timing.dsp, result.timing.classification, result.timing.anomaly);
+                  printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n", result.timing.dsp, result.timing.classification, result.timing.anomaly);
 
                   // print the predictions
-                  ei_printf("[");
+                  printf("[");
                  
-                  // const char* const filename = "log.txt";
-                  // fr = f_open(&fil, filename, FA_OPEN_APPEND | FA_WRITE);
-                  
                   // if (FR_OK != fr && FR_EXIST != fr) {
                   //   panic("f_open(%s) error: %s (%d)\n", filename, FRESULT_str(fr), fr);
                   // }
@@ -158,31 +227,31 @@ int main( void )
                   {
                       ei_printf("%.5f", result.classification[ix].value);
 
-                      // f_printf(&fil, "%f", result.classification[ix].value);
+                      
 
+                      // if (f_printf(&fil, "%f", result.classification[ix].value) < 0) {
+                      //   printf("f_printf failed\n");
+                      // }     
                       if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
                         ei_printf(", ");
-                        // f_printf(&fil, ",");
+                        // if (f_printf(&fil, ",") < 0) {
+                        //   printf("f_printf failed\n");
+                        // }     
                       } else {
                         if (ix != EI_CLASSIFIER_LABEL_COUNT - 1)
                         {
                           ei_printf(", ");
-                          // f_printf(&fil, ",");
+                          // if (f_printf(&fil, ",") < 0) {
+                          //   printf("f_printf failed\n");
+                          // }     
                         }
                     }
 
                   }
                   if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
                       printf("%.3f", result.anomaly);
-                      // f_printf(&fil, "%f", result.anomaly);
                   }
 
-                  // // close file
-                  // fr = f_close(&fil);
-                  // if (FR_OK != fr) {
-                  //     printf("f_close error: %s (%d)\n", FRESULT_str(fr), fr);
-                  // }
-                  // f_unmount(pSD->pcName);
                 }
 
                 printf("]\n");
@@ -214,5 +283,5 @@ int main( void )
         }
     }
 
-    return 0;
+    // return 0;
 }
