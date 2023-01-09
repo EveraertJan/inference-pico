@@ -270,7 +270,7 @@ int main( void )
                 printf("]\n");
             }   
             writeToSD("", false, true); 
-            ei_sleep(2000);
+            ei_sleep(10000);
             closeSD();
           
             inferencing = false;
