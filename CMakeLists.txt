@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.12)
 set(MODEL_FOLDER source)
 set(EI_SDK_FOLDER source/edge-impulse-sdk)
 set(MICROPHONE_FOLDER source/microphone)
+set(TFT_FOLDER source/st7735)
 
 include(pico_sdk_import.cmake)
 
@@ -33,9 +34,22 @@ target_include_directories(pico_analog_microphone INTERFACE
 target_link_libraries(pico_analog_microphone INTERFACE pico_stdlib hardware_adc hardware_dma FatFs_SPI)
 
 
+add_library(pico_st7735 INTERFACE)
+target_sources(pico_st7735 INTERFACE
+    ${CMAKE_CURRENT_LIST_DIR}/lib/pico_st7735/ST7735_TFT.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/lib/pico_st7735/ST7735_TFT_graphics.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/lib/pico_st7735/ST7735_TFT_Print.cpp
+)
+target_include_directories(pico_st7735 INTERFACE
+    ${CMAKE_CURRENT_LIST_DIR}/lib/st7735/include
+)
+
+target_link_libraries(pico_st7735 INTERFACE pico_stdlib hardware_spi)
+
 target_link_libraries(app PUBLIC pico_stdlib)
 target_link_libraries(app PUBLIC pico_analog_microphone)
 target_link_libraries(app PUBLIC FatFs_SPI)
+target_link_libraries(app PUBLIC pico_st7735)
 
 
 pico_set_program_name(app "recorder")
