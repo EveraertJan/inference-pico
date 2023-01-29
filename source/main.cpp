@@ -24,6 +24,8 @@
 ST7735_TFT myTFT;
 bool bTestFPS = false;
 
+
+
 extern "C" void writ();
 
 
@@ -35,9 +37,13 @@ int ret;
 char buf[100];
 char filename[] = "INFERENCE.CSV";
 
+std::string done = "";
+std::string todo = "Nothing";
+int social = 0;
+int silence = 0;
+int talking = 0;
 
-void SetupTFT(void)
-{
+void SetupTFT(void) {
 
   
   //*************** USER OPTION 0 SPI_SPEED + TYPE ***********
@@ -120,7 +126,87 @@ void initSD() {
         printf("ERROR: Could not open file (%d)\r\n", fr);
     }
 }
+void readSD() {
+  silence = 0;
+  talking = 0;
+  social = 0;
+  FIL f;
+  if (!sd_init_driver()) {
+      printf("ERROR: Could not initialize SD card\r\n");
+  }
+  fr = f_mount(&fs, "0:", 1);
+  if (fr != FR_OK) {
+      printf("ERROR: Could not mount filesystem (%d)\r\n", fr);
+  }
+  fr = f_open(&f, filename, FA_READ);
+  if (fr != FR_OK) {
+      printf("ERROR: Could not open file (%d)\r\n", fr);
+  }
 
+  printf("%s\n", (FR_OK != fr ? "Fail :(" : "OK"));
+  if (FR_OK != fr) printf("f_open error: %s (%d)\n", FRESULT_str(fr), fr);
+  fflush(stdout);
+  printf("contents:\n");
+
+  std::string cur = "";
+  
+  while (!f_eof(&f)) {
+      // int c = f_getc(f);
+      char c;
+      UINT br;
+      fr = f_read(&f, &c, sizeof c, &br);
+      if (FR_OK != fr) {
+        printf("f_read error: %s (%d)\n", FRESULT_str(fr), fr);
+      } else {
+
+        if(c == '\n') {
+
+          size_t pos = 0;
+          std::string token;
+          float s = 0.0;
+          float h = 0.0;
+          float t = 0.0;
+
+          char *ptr; // declare a ptr pointer  
+          ptr = strtok(const_cast<char*>(cur.c_str()), ","); 
+          while (ptr != NULL){  
+            std::string str = ptr;
+            if (str.find('.') != std::string::npos) {
+              printf("%s", str);
+              if(s == 0.0) {
+                s = stof(str);
+              } else if(h == 0.0) {
+                h = stof(str);
+              } else if(t == 0.0) {
+                t = stof(str);
+              }
+            }                
+              
+            ptr = strtok (NULL, " , ");  
+          }  
+
+
+          if(s > h && s > t) {
+            social += 1;
+          }
+          if(h > s && h > t) {
+            silence += 1;
+          }
+          if(t > s && t > h) {
+            talking += 1;
+          }
+
+          cur = "";
+        } else {
+          cur.push_back(c);       
+        }
+      }
+  }
+
+  printf("\nClosing ...");
+  fr = f_close(&f);
+
+}
 void closeSD() {
 
     // Close file
@@ -133,43 +219,32 @@ void closeSD() {
     f_unmount("0:");
 }
 
-// void SetupTFT(void) {
-
-    
-//   //*************** USER OPTION 0 SPI_SPEED + TYPE ***********
-//   bool bhardwareSPI = true; // true for hardware spi, 
+void evaluate() {
+  // for (int i = 0; i < done.length(); i++) {
   
-//   if (bhardwareSPI == true) { // hw spi
-//       uint32_t TFT_SCLK_FREQ =  1000 ; // Spi freq in KiloHertz , 1000 = 1Mhz
-//       myTFT.TFTInitSPIType(TFT_SCLK_FREQ, spi1); 
-//   } else { // sw spi
-//       myTFT.TFTInitSPIType(); 
-//   }
-//   //**********************************************************
+  //     // Print current character
+  //   if(strcmp(&done[i],"s") == 0) {
+  //     s++;
+  //   } 
+  //   if(strcmp(&done[i],"t") == 0) {
+  //     t++;
+  //   }
+  //   if(strcmp(&done[i],"h") == 0){
+  //     h++;
+  //   }
+  // }
+  if(social > silence && social > talking) {
+    todo = "Some rest maybe?";
+  }  
+  if(silence > social && silence > talking) {
+    todo = "More social contact";
+  }  
+  if(talking > silence && talking > social) {
+    todo = "Less talking";
+  }  
+  printf("%", todo);
 
-//   // ******** USER OPTION 1 GPIO *********
-//   // NOTE if using Hardware SPI clock and data pins will be tied to 
-//   // the chosen interface eg Spi0 CLK=18 DIN=19)
-//       int8_t SDIN_TFT = 11; 
-//       int8_t SCLK_TFT = 10; 
-//       int8_t DC_TFT = 3;
-//       int8_t CS_TFT = 2 ;  
-//       int8_t RST_TFT = 12;
-//       myTFT.TFTSetupGPIO(RST_TFT, DC_TFT, CS_TFT, SCLK_TFT, SDIN_TFT);
-//   //**********************************************************
-
-//   // ****** USER OPTION 2 Screen Setup ****** 
-//       uint8_t OFFSET_COL = 0;  // 2, These offsets can be adjusted for any issues->
-//       uint8_t OFFSET_ROW = 0; // 3, with screen manufacture tolerance/defects
-//       uint16_t TFT_WIDTH = 128;// Screen width in pixels
-//       uint16_t TFT_HEIGHT = 160; // Screen height in pixels
-//       myTFT.TFTInitScreenSize(OFFSET_COL, OFFSET_ROW , TFT_WIDTH , TFT_HEIGHT);
-//   // ******************************************
-
-//   // ******** USER OPTION 3 PCB_TYPE  **************************
-//       myTFT.TFTInitPCBType(TFT_ST7735R_Red); // pass enum,4 choices,see README
-//   //**********************************************************
-// }
+}
 
 // configuration
 const struct analog_microphone_config config = {
@@ -216,13 +291,21 @@ void on_analog_samples_ready()
 
 void resultOnDisplay(char toDisplay[]) {
   myTFT.TFTfillScreen(ST7735_BLACK);
-  myTFT.TFTdrawText(20, 10, toDisplay, ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(10, 10, toDisplay, ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(10, 30, const_cast<char*>(todo.c_str()), ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(10, 100, "social: ", ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(110, 100, const_cast<char*>(std::to_string(social).c_str()), ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(10, 120, "silence: ", ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(110, 120, const_cast<char*>(std::to_string(silence).c_str()), ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(10, 140, "talking: ", ST7735_WHITE, ST7735_BLACK, 1);
+  myTFT.TFTdrawText(110, 140, const_cast<char*>(std::to_string(talking).c_str()), ST7735_WHITE, ST7735_BLACK, 1);
 }
 int main( void )
 {
+    stdio_init_all();
     ei_impulse_result_t result = {nullptr};
     // initialize stdio and wait for USB CDC connect
-    stdio_init_all();
+
 
 
     char datetime_buf[256];
@@ -243,9 +326,9 @@ int main( void )
     rtc_init();
     rtc_set_datetime(&t);
 
-    while (!tud_cdc_connected()) {
+    // while (!tud_cdc_connected()) {
         tight_loop_contents();
-    }
+    // }
 
     printf("hello analog microphone\n");
 
@@ -271,12 +354,12 @@ int main( void )
         // while (1) { tight_loop_contents();  }
     }    
 
-    initSD();
-    writeToSD("time,timingDSP-classification-anomaly,c1,c2,c3,", false, true);
-    closeSD();
+    // initSD();
+    // writeToSD("time,timingDSP-classification-anomaly,c1,c2,c3,", false, true);
+    // closeSD();
 
     SetupTFT();
-
+    readSD();
     while (true) {
 
         rtc_get_datetime(&t);
@@ -351,12 +434,15 @@ int main( void )
                   }
                   if(result.classification[0].value > result.classification[1].value && result.classification[0].value > result.classification[2].value) {
                     resultOnDisplay("SOCIAL");
+                    done += "s";
                   }
                   if(result.classification[1].value > result.classification[0].value && result.classification[1].value > result.classification[2].value) {
                     resultOnDisplay("SILENCE");
+                    done += "h";
                   }
                   if(result.classification[2].value > result.classification[0].value && result.classification[2].value > result.classification[1].value) {
                     resultOnDisplay("TALKING");
+                    done += "t";
                   }
                   if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
                       printf("%.3f", result.anomaly);
@@ -366,9 +452,13 @@ int main( void )
 
                 printf("]\n");
             }   
-            writeToSD("", false, true); 
-            ei_sleep(10000);
+            writeToSD("", false, true);
             closeSD();
+            ei_sleep(5000);
+
+            readSD();
+            evaluate();
+            ei_sleep(5000);
           
             inferencing = false;
             writing_on = 0;

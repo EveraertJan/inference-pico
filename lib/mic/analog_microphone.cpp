@@ -153,6 +153,7 @@ void analog_microphone_stop() {
     irq_set_enabled(analog_mic.dma_irq, false);
 }
 
+
 static void analog_dma_handler() {
     // clear IRQ
     if (analog_mic.dma_irq == DMA_IRQ_0) {
