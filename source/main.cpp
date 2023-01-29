@@ -4,10 +4,10 @@
 #include "ff.h"
 
 #include "pico/stdlib.h"
-#include "pico/stdlib.h"
 #include "pico/util/datetime.h"
 #include "pico/analog_microphone.h"
 #include <pico/stdio_usb.h>
+#include "pico/time.h"
 
 
 #include "tusb.h"
@@ -18,6 +18,12 @@
 #include <hardware/gpio.h>
 #include <hardware/uart.h>
 #include "hardware/rtc.h"
+#include "hardware/spi.h"
+
+#include "st7735/ST7735_TFT.hpp"
+ST7735_TFT myTFT;
+bool bTestFPS = false;
+
 extern "C" void writ();
 
 
@@ -29,6 +35,45 @@ int ret;
 char buf[100];
 char filename[] = "INFERENCE.CSV";
 
+
+void SetupTFT(void)
+{
+
+  
+  //*************** USER OPTION 0 SPI_SPEED + TYPE ***********
+    bool bhardwareSPI = true; // true for hardware spi, 
+    
+    if (bhardwareSPI == true) { // hw spi
+      uint32_t TFT_SCLK_FREQ =  1000 ; // Spi freq in KiloHertz , 1000 = 1Mhz
+      myTFT.TFTInitSPIType(TFT_SCLK_FREQ, spi1); 
+    } else { // sw spi
+      myTFT.TFTInitSPIType(); 
+    }
+  //**********************************************************
+
+  // ******** USER OPTION 1 GPIO *********
+  // NOTE if using Hardware SPI clock and data pins will be tied to 
+  // the chosen interface eg Spi0 CLK=18 DIN=19)
+    int8_t SDIN_TFT = 11; 
+    int8_t SCLK_TFT = 10; 
+    int8_t DC_TFT = 3;
+    int8_t CS_TFT = 2 ;  
+    int8_t RST_TFT = 12;
+    myTFT.TFTSetupGPIO(RST_TFT, DC_TFT, CS_TFT, SCLK_TFT, SDIN_TFT);
+  //**********************************************************
+
+  // ****** USER OPTION 2 Screen Setup ****** 
+    uint8_t OFFSET_COL = 0;  // 2, These offsets can be adjusted for any issues->
+    uint8_t OFFSET_ROW = 0; // 3, with screen manufacture tolerance/defects
+    uint16_t TFT_WIDTH = 128;// Screen width in pixels
+    uint16_t TFT_HEIGHT = 160; // Screen height in pixels
+    myTFT.TFTInitScreenSize(OFFSET_COL, OFFSET_ROW , TFT_WIDTH , TFT_HEIGHT);
+  // ******************************************
+
+  // ******** USER OPTION 3 PCB_TYPE  **************************
+    myTFT.TFTInitPCBType(TFT_ST7735R_Red); // pass enum,4 choices,see README
+  //**********************************************************
+}
 
 void writeToSD(std::string in, bool separate, bool endLine) {
     if (separate) {
@@ -88,6 +133,44 @@ void closeSD() {
     f_unmount("0:");
 }
 
+// void SetupTFT(void) {
+
+    
+//   //*************** USER OPTION 0 SPI_SPEED + TYPE ***********
+//   bool bhardwareSPI = true; // true for hardware spi, 
+  
+//   if (bhardwareSPI == true) { // hw spi
+//       uint32_t TFT_SCLK_FREQ =  1000 ; // Spi freq in KiloHertz , 1000 = 1Mhz
+//       myTFT.TFTInitSPIType(TFT_SCLK_FREQ, spi1); 
+//   } else { // sw spi
+//       myTFT.TFTInitSPIType(); 
+//   }
+//   //**********************************************************
+
+//   // ******** USER OPTION 1 GPIO *********
+//   // NOTE if using Hardware SPI clock and data pins will be tied to 
+//   // the chosen interface eg Spi0 CLK=18 DIN=19)
+//       int8_t SDIN_TFT = 11; 
+//       int8_t SCLK_TFT = 10; 
+//       int8_t DC_TFT = 3;
+//       int8_t CS_TFT = 2 ;  
+//       int8_t RST_TFT = 12;
+//       myTFT.TFTSetupGPIO(RST_TFT, DC_TFT, CS_TFT, SCLK_TFT, SDIN_TFT);
+//   //**********************************************************
+
+//   // ****** USER OPTION 2 Screen Setup ****** 
+//       uint8_t OFFSET_COL = 0;  // 2, These offsets can be adjusted for any issues->
+//       uint8_t OFFSET_ROW = 0; // 3, with screen manufacture tolerance/defects
+//       uint16_t TFT_WIDTH = 128;// Screen width in pixels
+//       uint16_t TFT_HEIGHT = 160; // Screen height in pixels
+//       myTFT.TFTInitScreenSize(OFFSET_COL, OFFSET_ROW , TFT_WIDTH , TFT_HEIGHT);
+//   // ******************************************
+
+//   // ******** USER OPTION 3 PCB_TYPE  **************************
+//       myTFT.TFTInitPCBType(TFT_ST7735R_Red); // pass enum,4 choices,see README
+//   //**********************************************************
+// }
+
 // configuration
 const struct analog_microphone_config config = {
     // GPIO to use for input, must be ADC compatible (GPIO 26 - 28)
@@ -130,9 +213,13 @@ void on_analog_samples_ready()
     // internal sample buffer are ready for reading 
     samples_read = analog_microphone_read(sample_buffer, 256);
 }
+
+void resultOnDisplay(char toDisplay[]) {
+  myTFT.TFTfillScreen(ST7735_BLACK);
+  myTFT.TFTdrawText(20, 10, toDisplay, ST7735_WHITE, ST7735_BLACK, 1);
+}
 int main( void )
 {
-
     ei_impulse_result_t result = {nullptr};
     // initialize stdio and wait for USB CDC connect
     stdio_init_all();
@@ -187,6 +274,8 @@ int main( void )
     initSD();
     writeToSD("time,timingDSP-classification-anomaly,c1,c2,c3,", false, true);
     closeSD();
+
+    SetupTFT();
 
     while (true) {
 
@@ -248,7 +337,6 @@ int main( void )
                   for (size_t ix = 0; ix < EI_CLASSIFIER_LABEL_COUNT; ix++)
                   {
                       ei_printf("%.5f", result.classification[ix].value);
-                                          
                       writeToSD( std::to_string(result.classification[ix].value), true, false);
 
                       if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
@@ -260,6 +348,15 @@ int main( void )
                         }
                     }
 
+                  }
+                  if(result.classification[0].value > result.classification[1].value && result.classification[0].value > result.classification[2].value) {
+                    resultOnDisplay("SOCIAL");
+                  }
+                  if(result.classification[1].value > result.classification[0].value && result.classification[1].value > result.classification[2].value) {
+                    resultOnDisplay("SILENCE");
+                  }
+                  if(result.classification[2].value > result.classification[0].value && result.classification[2].value > result.classification[1].value) {
+                    resultOnDisplay("TALKING");
                   }
                   if(EI_CLASSIFIER_HAS_ANOMALY == 1) {
                       printf("%.3f", result.anomaly);
